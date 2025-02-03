@@ -1,0 +1,11 @@
+---
+k8s:
+  hosts:
+    nurgling-0:
+      ansible_host: 10.10.1.20
+    nurgling-1:
+      ansible_host: 10.10.1.21
+    nurgling-2:
+      ansible_host: 10.10.1.22
+    nurgling-3:
+      ansible_host: 10.10.1.23
