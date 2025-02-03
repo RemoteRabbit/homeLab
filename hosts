@@ -1,8 +1,14 @@
 ---
 k8s:
+  children:
+    k8s-master-nodes:
+    k8s-worker-nodes:
+k8s-master-nodes:
   hosts:
     nurgling-0:
       ansible_host: 10.10.1.20
+k8s-worker-nodes:
+  hosts:
     nurgling-1:
       ansible_host: 10.10.1.21
     nurgling-2:
