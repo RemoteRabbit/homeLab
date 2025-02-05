@@ -1,0 +1,110 @@
+---
+- name: Setup Kubernetes Master Node
+  hosts: k8s_master_nodes
+  become: true
+  tasks:
+    - name: Reset existing Kubernetes configuration
+      command: kubeadm reset -f
+
+    - name: Remove existing Kubernetes files
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/kubernetes/manifests/kube-apiserver.yaml
+        - /etc/kubernetes/manifests/kube-controller-manager.yaml
+        - /etc/kubernetes/manifests/kube-scheduler.yaml
+        - /etc/kubernetes/manifests/etcd.yaml
+
+    - name: Create kubeadm config
+      copy:
+        dest: /root/kubeadm-config.yaml
+        content: |
+          apiVersion: kubeadm.k8s.io/v1beta3
+          kind: InitConfiguration
+          localAPIEndpoint:
+            advertiseAddress: "10.10.1.20"
+            bindPort: 6443
+          ---
+          apiVersion: kubeadm.k8s.io/v1beta3
+          kind: ClusterConfiguration
+          networking:
+            podSubnet: "172.16.0.0/16"
+          apiServer:
+            extraArgs:
+              secure-port: "6443"
+              advertise-address: "10.10.1.20"
+              bind-address: "0.0.0.0"
+
+    - name: Initialize Kubernetes cluster
+      command: kubeadm init --config /root/kubeadm-config.yaml
+      register: kubeadm_init
+
+    - name: Create .kube directory for root
+      file:
+        path: /root/.kube
+        state: directory
+        mode: '0755'
+
+    - name: Copy kube config for root
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /root/.kube/config
+        remote_src: yes
+
+    - name: Create .kube directory for default user
+      file:
+        path: /home/remoterabbit/.kube
+        state: directory
+        mode: '0755'
+        owner: remoterabbit
+        group: remoterabbit
+
+    - name: Copy kube config for default user
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /home/remoterabbit/.kube/config
+        remote_src: yes
+        owner: remoterabbit
+        group: remoterabbit
+
+    - name: Set KUBECONFIG environment variable
+      lineinfile:
+        path: /home/remoterabbit/.bashrc
+        line: 'export KUBECONFIG=/home/remoterabbit/.kube/config'
+        create: yes
+
+    - name: Install kubectl
+      apt:
+        name: kubectl
+        state: present
+        update_cache: yes
+
+    - name: Install Calico CNI
+      command: kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/calico.yaml
+
+    - name: Get join command
+      command: kubeadm token create --print-join-command
+      register: join_command
+
+    - name: Save join command to file
+      local_action:
+        module: copy
+        content: "{{ join_command.stdout }}"
+        dest: "join-command.txt"
+        mode: '0644'
+      become: false
+
+    - name: Wait for API server
+      wait_for:
+        port: 6443
+        timeout: 300
+
+    - name: Verify API server binding
+      shell: netstat -tlpn | grep 6443
+      register: api_binding
+
+    - name: Display API binding
+      debug:
+        var: api_binding.stdout
+
