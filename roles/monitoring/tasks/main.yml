@@ -1,0 +1,109 @@
+---
+- name: Check if kubeconfig file exists and get permissions
+  stat:
+    path: "{{ kubeconfig_path }}"
+  register: kubeconfig_stat
+  become: true
+  run_once: true
+
+- name: Debug kubeconfig permissions
+  debug:
+    msg: |
+      Kubeconfig file: {{ kubeconfig_path }}
+      Exists: {{ kubeconfig_stat.stat.exists }}
+      Mode: {{ kubeconfig_stat.stat.mode if kubeconfig_stat.stat.exists else 'N/A' }}
+      Owner: {{ kubeconfig_stat.stat.pw_name if kubeconfig_stat.stat.exists else 'N/A' }}
+      Group: {{ kubeconfig_stat.stat.gr_name if kubeconfig_stat.stat.exists else 'N/A' }}
+  run_once: true
+
+- name: Create monitoring directory on server
+  file:
+    path: /tmp/monitoring-manifests
+    state: directory
+  run_once: true
+
+- name: Copy monitoring manifests to server
+  copy:
+    src: "monitoring/"
+    dest: "/tmp/monitoring-manifests/"
+  run_once: true
+
+- name: Apply monitoring namespace
+  shell: sudo kubectl apply -f /tmp/monitoring-manifests/namespace.yml --kubeconfig={{ kubeconfig_path }}
+  run_once: true
+
+- name: Wait for monitoring namespace to be ready
+  shell: sudo kubectl get namespace monitoring --kubeconfig={{ kubeconfig_path }} -o jsonpath='{.status.phase}'
+  register: namespace_status
+  until: namespace_status.stdout == "Active"
+  retries: 10
+  delay: 5
+  run_once: true
+
+- name: Apply Prometheus RBAC
+  shell: sudo kubectl apply -f /tmp/monitoring-manifests/prometheus-rbac.yml --kubeconfig={{ kubeconfig_path }}
+  run_once: true
+
+- name: Apply Prometheus configuration
+  shell: sudo kubectl apply -f /tmp/monitoring-manifests/prometheus-config.yml --kubeconfig={{ kubeconfig_path }}
+  run_once: true
+
+- name: Apply Prometheus deployment
+  shell: sudo kubectl apply -f /tmp/monitoring-manifests/prometheus-deployment.yml --kubeconfig={{ kubeconfig_path }}
+  run_once: true
+
+- name: Apply Grafana configuration
+  shell: sudo kubectl apply -f /tmp/monitoring-manifests/grafana-config.yml --kubeconfig={{ kubeconfig_path }}
+  run_once: true
+
+- name: Apply Grafana deployment
+  shell: sudo kubectl apply -f /tmp/monitoring-manifests/grafana-deployment.yml --kubeconfig={{ kubeconfig_path }}
+  run_once: true
+
+- name: Apply Loki deployment
+  shell: sudo kubectl apply -f /tmp/monitoring-manifests/loki-deployment.yml --kubeconfig={{ kubeconfig_path }}
+  run_once: true
+
+- name: Apply Promtail deployment
+  shell: sudo kubectl apply -f /tmp/monitoring-manifests/promtail-deployment.yml --kubeconfig={{ kubeconfig_path }}
+  run_once: true
+
+- name: Apply Node Exporter
+  shell: sudo kubectl apply -f /tmp/monitoring-manifests/node-exporter.yml --kubeconfig={{ kubeconfig_path }}
+  run_once: true
+
+- name: Apply Kube State Metrics
+  shell: sudo kubectl apply -f /tmp/monitoring-manifests/kube-state-metrics.yml --kubeconfig={{ kubeconfig_path }}
+  run_once: true
+
+- name: Wait for Prometheus to be ready
+  shell: sudo kubectl rollout status deployment/prometheus -n monitoring --kubeconfig={{ kubeconfig_path }} --timeout=300s
+  run_once: true
+
+- name: Wait for Grafana to be ready
+  shell: sudo kubectl rollout status deployment/grafana -n monitoring --kubeconfig={{ kubeconfig_path }} --timeout=300s
+  run_once: true
+
+- name: Get node IP for access instructions
+  debug:
+    msg: |
+      Monitoring stack deployed successfully!
+
+      Access URLs:
+      - Grafana: http://{{ ansible_default_ipv4.address }}:30001 (admin/admin)
+      - Prometheus: http://{{ ansible_default_ipv4.address }}:30000
+
+      Components deployed:
+      - Prometheus (metrics collection)
+      - Grafana (visualization)
+      - Loki (log aggregation)
+      - Promtail (log collection)
+      - Node Exporter (system metrics)
+      - Kube State Metrics (k8s metrics)
+  run_once: true
+
+- name: Clean up temporary files
+  file:
+    path: /tmp/monitoring-manifests
+    state: absent
+  run_once: true

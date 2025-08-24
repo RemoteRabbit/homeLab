@@ -1,0 +1,23 @@
+---
+- name: Cluster prep
+  hosts: k3s_cluster
+  gather_facts: true
+  become: true
+  become_user: root
+  roles:
+    - role: prereq
+    - role: airgap
+
+- name: Setup K3S server
+  hosts: server
+  become: true
+  become_user: root
+  roles:
+    - role: k3s_server
+
+- name: Setup K3S agent
+  hosts: agent
+  become: true
+  become_user: root
+  roles:
+    - role: k3s_agent

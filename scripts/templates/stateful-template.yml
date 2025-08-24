@@ -1,0 +1,192 @@
+# Stateful Application Template (Database, File Server, etc.)
+#
+# Replace the following placeholders:
+# - APPNAME: Your application name (lowercase, no spaces)
+# - IMAGE: Docker image name
+# - TAG: Docker image tag
+# - PORT: Application port
+# - 30XXX: NodePort (30000-32767 range)
+# - STORAGE_SIZE: Storage size (e.g., 10Gi, 100Gi)
+# - DATA_PATH: Container path for data storage
+#
+# Usage:
+# 1. Copy this file: cp manifests/templates/stateful-template.yml manifests/apps/APPNAME/
+# 2. Replace placeholders with actual values
+# 3. Deploy: kubectl apply -f manifests/apps/APPNAME/
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: APPNAME
+  labels:
+    name: APPNAME
+    type: application
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: APPNAME-data
+  namespace: APPNAME
+  labels:
+    app: APPNAME
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: STORAGE_SIZE
+  storageClassName: local-path
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: APPNAME
+  namespace: APPNAME
+  labels:
+    app: APPNAME
+    version: v1.0.0
+spec:
+  serviceName: APPNAME-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app: APPNAME
+  template:
+    metadata:
+      labels:
+        app: APPNAME
+        version: v1.0.0
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "PORT"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: APPNAME
+        image: IMAGE:TAG
+        ports:
+        - name: http
+          containerPort: PORT
+          protocol: TCP
+        env:
+        # Database-specific environment variables example
+        - name: DATA_DIR
+          value: "DATA_PATH"
+        - name: DB_NAME
+          value: "APPNAME"
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: APPNAME-secret
+              key: username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: APPNAME-secret
+              key: password
+        volumeMounts:
+        - name: data
+          mountPath: DATA_PATH
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: false  # Many databases need root
+          # runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: APPNAME-data
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: APPNAME-secret
+  namespace: APPNAME
+type: Opaque
+data:
+  # Base64 encoded values - change these!
+  username: YWRtaW4=    # admin
+  password: cGFzc3dvcmQ=  # password
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: APPNAME-headless
+  namespace: APPNAME
+  labels:
+    app: APPNAME
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: APPNAME
+  ports:
+  - name: http
+    port: PORT
+    targetPort: http
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: APPNAME
+  namespace: APPNAME
+  labels:
+    app: APPNAME
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "PORT"
+spec:
+  type: ClusterIP
+  selector:
+    app: APPNAME
+  ports:
+  - name: http
+    port: PORT
+    targetPort: http
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: APPNAME-nodeport
+  namespace: APPNAME
+  labels:
+    app: APPNAME
+spec:
+  type: NodePort
+  selector:
+    app: APPNAME
+  ports:
+  - name: http
+    port: PORT
+    targetPort: http
+    nodePort: 30XXX

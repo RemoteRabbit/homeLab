@@ -1,0 +1,65 @@
+---
+# Complete monitoring stack deployment file
+# Apply this file to deploy the entire monitoring solution
+# kubectl apply -f manifests/monitoring/monitoring-stack.yml
+
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    name: monitoring
+---
+# Instructions as ConfigMap for easy reference
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: monitoring-instructions
+  namespace: monitoring
+data:
+  README.md: |
+    # K3s Homelab Monitoring Stack
+
+    This monitoring stack includes:
+    - **Prometheus**: Metrics collection and alerting
+    - **Grafana**: Data visualization and dashboards
+    - **Loki**: Log aggregation
+    - **Promtail**: Log collection agent
+    - **Node Exporter**: System metrics
+    - **Kube State Metrics**: Kubernetes cluster metrics
+
+    ## Access URLs
+    - Grafana: http://[node-ip]:30001 (admin/admin)
+    - Prometheus: http://[node-ip]:30000
+
+    ## Deployment Commands
+    ```bash
+    # Deploy individual components
+    kubectl apply -f manifests/monitoring/namespace.yml
+    kubectl apply -f manifests/monitoring/prometheus-rbac.yml
+    kubectl apply -f manifests/monitoring/prometheus-config.yml
+    kubectl apply -f manifests/monitoring/prometheus-deployment.yml
+    kubectl apply -f manifests/monitoring/grafana-config.yml
+    kubectl apply -f manifests/monitoring/grafana-deployment.yml
+    kubectl apply -f manifests/monitoring/loki-deployment.yml
+    kubectl apply -f manifests/monitoring/promtail-deployment.yml
+    kubectl apply -f manifests/monitoring/node-exporter.yml
+    kubectl apply -f manifests/monitoring/kube-state-metrics.yml
+
+    # Or deploy everything at once
+    kubectl apply -f manifests/monitoring/
+    ```
+
+    ## Default Alerts
+    - Node down for >5min
+    - High CPU usage (>80%)
+    - High memory usage (>90%)
+    - Kubernetes node not ready
+    - Pod crash looping
+
+    ## Next Steps
+    1. Access Grafana and import additional dashboards
+    2. Configure alert channels (email, Slack, etc.)
+    3. Set up persistent storage for metrics retention
+    4. Add custom application metrics

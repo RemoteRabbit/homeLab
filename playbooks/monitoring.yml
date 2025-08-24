@@ -1,0 +1,42 @@
+---
+- name: Deploy monitoring stack to K3s cluster
+  hosts: server[0]
+  gather_facts: true
+  become: true
+  vars:
+    # Override default kubeconfig path if needed
+    kubeconfig_path: "/etc/rancher/k3s/k3s.yaml"
+  roles:
+    - role: monitoring
+
+  post_tasks:
+    - name: Display monitoring access information
+      debug:
+        msg: |
+          🚀 Monitoring Stack Deployment Complete! 🚀
+
+          📊 Grafana Dashboard: http://{{ ansible_default_ipv4.address }}:30001
+             Username: admin
+             Password: admin
+
+          📈 Prometheus UI: http://{{ ansible_default_ipv4.address }}:30000
+
+          🔍 What's included:
+          • Prometheus - Metrics collection and alerting
+          • Grafana - Beautiful dashboards and visualization
+          • Loki - Log aggregation and search
+          • Promtail - Automatic log collection from all pods
+          • Node Exporter - System-level metrics
+          • Kube State Metrics - Kubernetes cluster state
+
+          💡 Next Steps:
+          1. Access Grafana and explore the pre-configured K8s dashboard
+          2. Import additional dashboards from grafana.com
+          3. Set up alerting channels (email, Slack, Discord, etc.)
+          4. Configure log queries in Grafana using Loki data source
+
+          📚 Useful Grafana Dashboard IDs to import:
+          • 12119 - Kubernetes Cluster Overview
+          • 315 - Kubernetes Cluster Monitoring
+          • 13332 - Kube State Metrics v2
+          • 1860 - Node Exporter Full
