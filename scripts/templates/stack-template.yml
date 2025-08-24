@@ -1,0 +1,360 @@
+# Multi-Service Stack Template (Frontend + Backend + Database)
+#
+# Replace the following placeholders:
+# - STACKNAME: Your stack name (lowercase, no spaces)
+# - FRONTEND_IMAGE: Frontend image name
+# - BACKEND_IMAGE: Backend image name
+# - DB_IMAGE: Database image name
+# - Various _TAG: Image tags
+# - Various _PORT: Service ports
+# - 30XXX: NodePort numbers (30000-32767 range)
+#
+# Usage:
+# 1. Copy this file: cp manifests/templates/stack-template.yml manifests/apps/STACKNAME/
+# 2. Replace placeholders with actual values
+# 3. Customize services as needed
+# 4. Deploy: kubectl apply -f manifests/apps/STACKNAME/
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: STACKNAME
+  labels:
+    name: STACKNAME
+    type: stack
+
+---
+# Database PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: STACKNAME-db-data
+  namespace: STACKNAME
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+# Database Secrets
+apiVersion: v1
+kind: Secret
+metadata:
+  name: STACKNAME-db-secret
+  namespace: STACKNAME
+type: Opaque
+data:
+  # Base64 encoded - change these!
+  root-password: cm9vdHBhc3N3b3Jk    # rootpassword
+  username: c3RhY2t1c2Vy              # stackuser
+  password: c3RhY2twYXNzd29yZA==      # stackpassword
+  database: c3RhY2tkYg==              # stackdb
+
+---
+# Database Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: STACKNAME-db
+  namespace: STACKNAME
+  labels:
+    app: STACKNAME-db
+    component: database
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: STACKNAME-db
+  template:
+    metadata:
+      labels:
+        app: STACKNAME-db
+        component: database
+    spec:
+      containers:
+      - name: database
+        image: DB_IMAGE:DB_TAG
+        ports:
+        - containerPort: DB_PORT
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: STACKNAME-db-secret
+              key: root-password
+        - name: MYSQL_DATABASE
+          valueFrom:
+            secretKeyRef:
+              name: STACKNAME-db-secret
+              key: database
+        - name: MYSQL_USER
+          valueFrom:
+            secretKeyRef:
+              name: STACKNAME-db-secret
+              key: username
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: STACKNAME-db-secret
+              key: password
+        volumeMounts:
+        - name: db-data
+          mountPath: /var/lib/mysql
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+      volumes:
+      - name: db-data
+        persistentVolumeClaim:
+          claimName: STACKNAME-db-data
+
+---
+# Database Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: STACKNAME-db
+  namespace: STACKNAME
+  labels:
+    app: STACKNAME-db
+spec:
+  selector:
+    app: STACKNAME-db
+  ports:
+  - port: DB_PORT
+    targetPort: DB_PORT
+
+---
+# Backend Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: STACKNAME-backend
+  namespace: STACKNAME
+  labels:
+    app: STACKNAME-backend
+    component: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: STACKNAME-backend
+  template:
+    metadata:
+      labels:
+        app: STACKNAME-backend
+        component: backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "BACKEND_PORT"
+    spec:
+      containers:
+      - name: backend
+        image: BACKEND_IMAGE:BACKEND_TAG
+        ports:
+        - name: http
+          containerPort: BACKEND_PORT
+        env:
+        - name: DB_HOST
+          value: "STACKNAME-db"
+        - name: DB_PORT
+          value: "DB_PORT"
+        - name: DB_NAME
+          valueFrom:
+            secretKeyRef:
+              name: STACKNAME-db-secret
+              key: database
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: STACKNAME-db-secret
+              key: username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: STACKNAME-db-secret
+              key: password
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 300m
+            memory: 256Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+---
+# Backend Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: STACKNAME-backend
+  namespace: STACKNAME
+  labels:
+    app: STACKNAME-backend
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "BACKEND_PORT"
+spec:
+  selector:
+    app: STACKNAME-backend
+  ports:
+  - name: http
+    port: BACKEND_PORT
+    targetPort: http
+
+---
+# Frontend Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: STACKNAME-frontend
+  namespace: STACKNAME
+  labels:
+    app: STACKNAME-frontend
+    component: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: STACKNAME-frontend
+  template:
+    metadata:
+      labels:
+        app: STACKNAME-frontend
+        component: frontend
+    spec:
+      containers:
+      - name: frontend
+        image: FRONTEND_IMAGE:FRONTEND_TAG
+        ports:
+        - name: http
+          containerPort: FRONTEND_PORT
+        env:
+        - name: BACKEND_URL
+          value: "http://STACKNAME-backend:BACKEND_PORT"
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+        livenessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+---
+# Frontend Service (ClusterIP)
+apiVersion: v1
+kind: Service
+metadata:
+  name: STACKNAME-frontend
+  namespace: STACKNAME
+  labels:
+    app: STACKNAME-frontend
+spec:
+  selector:
+    app: STACKNAME-frontend
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+
+---
+# Frontend Service (NodePort for external access)
+apiVersion: v1
+kind: Service
+metadata:
+  name: STACKNAME-frontend-external
+  namespace: STACKNAME
+  labels:
+    app: STACKNAME-frontend
+spec:
+  type: NodePort
+  selector:
+    app: STACKNAME-frontend
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+    nodePort: 30XXX
+
+---
+# Optional: Network Policy to secure stack
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: STACKNAME-netpol
+  namespace: STACKNAME
+spec:
+  podSelector: {}  # Apply to all pods in namespace
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow traffic from monitoring namespace
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+  # Allow frontend to backend communication
+  - from:
+    - podSelector:
+        matchLabels:
+          component: frontend
+    ports:
+    - protocol: TCP
+      port: BACKEND_PORT
+  # Allow backend to database communication
+  - from:
+    - podSelector:
+        matchLabels:
+          component: backend
+    ports:
+    - protocol: TCP
+      port: DB_PORT
+  # Allow external access to frontend
+  - ports:
+    - protocol: TCP
+      port: FRONTEND_PORT
+  egress:
+  # Allow DNS resolution
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # Allow outbound HTTPS (for updates, etc.)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443

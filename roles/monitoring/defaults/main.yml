@@ -1,0 +1,29 @@
+---
+# Default variables for monitoring role
+
+# Kubernetes configuration
+kubeconfig_path: "~/.kube/config"
+
+# Monitoring configuration
+monitoring_namespace: monitoring
+
+# Prometheus configuration
+prometheus_retention_time: "30d"
+prometheus_storage_size: "10Gi"
+
+# Grafana configuration
+grafana_admin_user: admin
+grafana_admin_password: admin
+grafana_domain: "grafana.homelab.local"
+
+# Resource limits
+prometheus_memory_limit: "1Gi"
+prometheus_cpu_limit: "1000m"
+grafana_memory_limit: "1Gi"
+grafana_cpu_limit: "1000m"
+loki_memory_limit: "1Gi"
+loki_cpu_limit: "1000m"
+
+# NodePort configuration
+grafana_nodeport: 30001
+prometheus_nodeport: 30000
